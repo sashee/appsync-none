@@ -60,6 +60,15 @@ data "aws_iam_policy_document" "appsync" {
       aws_dynamodb_table.user.arn,
     ]
   }
+  statement {
+    actions = [
+      "logs:CreateLogStream",
+      "logs:PutLogEvents"
+    ]
+    resources = [
+      "arn:aws:logs:*:*:*"
+    ]
+  }
 }
 
 resource "aws_iam_role_policy" "appsync" {
@@ -67,10 +76,19 @@ resource "aws_iam_role_policy" "appsync" {
   policy = data.aws_iam_policy_document.appsync.json
 }
 
+resource "aws_cloudwatch_log_group" "loggroup" {
+  name              = "/aws/appsync/apis/${aws_appsync_graphql_api.appsync.id}"
+  retention_in_days = 14
+}
+
 resource "aws_appsync_graphql_api" "appsync" {
   name                = "appsync_test"
   schema              = file("schema.graphql")
   authentication_type = "AWS_IAM"
+  log_config {
+    cloudwatch_logs_role_arn = aws_iam_role.appsync.arn
+    field_log_level          = "ALL"
+  }
 }
 
 resource "aws_appsync_datasource" "ddb_users" {
@@ -121,7 +139,7 @@ resource "aws_appsync_resolver" "User_name" {
   request_template  = <<EOF
 {
 	"version": "2018-05-29",
-	"payload": "$util.toJson($ctx.source.first_name) $util.toJson($ctx.source.last_name)"
+	"payload": $util.toJson("$ctx.source.first_name $ctx.source.last_name")
 }
 EOF
   response_template = <<EOF
@@ -140,7 +158,7 @@ resource "aws_appsync_resolver" "User_last_modified" {
   request_template  = <<EOF
 {
 	"version": "2018-05-29",
-	"payload": $util.time.epochMilliSecondsToISO8601($ctx.source.last_modified)
+	"payload": $util.toJson($util.time.epochMilliSecondsToISO8601($ctx.source.last_modified))
 }
 EOF
   response_template = <<EOF
@@ -159,7 +177,8 @@ resource "aws_appsync_resolver" "User_last_login" {
   request_template  = <<EOF
 {
 	"version": "2018-05-29",
-	"payload": $util.time.epochMilliSecondsToFormatted($ctx.source.last_modified, $ctx.args.format)
+	"payload": $util.toJson($util.time.epochMilliSecondsToFormatted($ctx.source.last_login, $ctx.args.format))
+
 }
 EOF
   response_template = <<EOF
