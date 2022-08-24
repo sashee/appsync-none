@@ -1,0 +1,14 @@
+type User {
+	id: ID!
+	name: String!
+	last_modified: AWSDateTime!
+	last_login(format: String!): String!
+}
+
+type Query {
+	user(id: ID!): User
+}
+
+schema {
+	query: Query
+}
